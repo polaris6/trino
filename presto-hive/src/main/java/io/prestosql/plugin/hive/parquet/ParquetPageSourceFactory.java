@@ -16,6 +16,7 @@ package io.prestosql.plugin.hive.parquet;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.airlift.slice.Slice;
 import io.prestosql.parquet.Field;
 import io.prestosql.parquet.ParquetCorruptionException;
 import io.prestosql.parquet.ParquetDataSource;
@@ -171,6 +172,38 @@ public class ParquetPageSourceFactory
         ParquetReader parquetReader;
         ParquetDataSource dataSource = null;
         try {
+            boolean bloomNotMatch = false;
+
+            try {
+                Bloom bloom = null;
+                for (Entry<HiveColumnHandle, Domain> entry : effectivePredicate.getDomains().get().entrySet()) {
+                    HiveColumnHandle columnHandle = entry.getKey();
+                    if (!columnHandle.getHiveType().getCategory().equals(PRIMITIVE)) {
+                        continue;
+                    }
+                    Domain v = entry.getValue();
+                    if (v.isSingleValue()) {
+                        String columnName = columnHandle.getBaseColumnName();
+                        if (bloom == null) {
+                            bloom = new Bloom(hdfsEnvironment, path, user, configuration);
+                        }
+                        try {
+                            String target = ((Slice) v.getSingleValue()).toStringUtf8();
+                            bloomNotMatch = bloom.notMatches(columnName, target);
+                        }
+                        catch (Exception e) {
+                            continue;
+                        }
+
+                        if (bloomNotMatch) {
+                            return new ReaderPageSourceWithProjections(new EmptyPageSource(), Optional.empty());
+                        }
+                    }
+                }
+            }
+            catch (Exception e) {
+            }
+
             FileSystem fileSystem = hdfsEnvironment.getFileSystem(user, path, configuration);
             FSDataInputStream inputStream = hdfsEnvironment.doAs(user, () -> fileSystem.open(path));
             ParquetMetadata parquetMetadata = MetadataReader.readFooter(inputStream, path, fileSize);

@@ -50,6 +50,7 @@ import static io.prestosql.sql.ParsingUtil.createParsingOptions;
 import static io.prestosql.sql.analyzer.SemanticExceptions.semanticException;
 import static io.prestosql.sql.analyzer.TypeSignatureTranslator.toSqlType;
 import static io.prestosql.transaction.TransactionBuilder.transaction;
+import static java.util.Collections.emptyMap;
 import static org.testng.internal.EclipseInterface.ASSERT_LEFT;
 import static org.testng.internal.EclipseInterface.ASSERT_MIDDLE;
 import static org.testng.internal.EclipseInterface.ASSERT_RIGHT;
@@ -181,5 +182,19 @@ public final class ExpressionTestUtils
                 .execute(session, transactionSession -> {
                     return new TypeAnalyzer(SQL_PARSER, metadata).getTypes(transactionSession, typeProvider, expression);
                 });
+    }
+
+    public static void analyzeExpression(Metadata metadata, Expression expression)
+    {
+        ExpressionAnalyzer expressionAnalyzer = ExpressionAnalyzer.createWithoutSubqueries(
+                metadata,
+                new AllowAllAccessControl(),
+                TEST_SESSION,
+                TypeProvider.empty(),
+                emptyMap(),
+                node -> new IllegalStateException("Unexpected node: %s" + node),
+                WarningCollector.NOOP,
+                false);
+        expressionAnalyzer.analyze(expression, Scope.create());
     }
 }

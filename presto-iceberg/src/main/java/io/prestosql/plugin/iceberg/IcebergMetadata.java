@@ -78,10 +78,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
@@ -112,7 +114,6 @@ import static io.prestosql.spi.StandardErrorCode.SCHEMA_NOT_EMPTY;
 import static java.util.Collections.singletonList;
 import static java.util.Objects.requireNonNull;
 import static java.util.function.Function.identity;
-import static java.util.stream.Collectors.toList;
 import static org.apache.iceberg.BaseMetastoreTableOperations.ICEBERG_TABLE_TYPE_VALUE;
 import static org.apache.iceberg.BaseMetastoreTableOperations.TABLE_TYPE_PROP;
 import static org.apache.iceberg.FileFormat.ORC;
@@ -228,14 +229,26 @@ public class IcebergMetadata
     @Override
     public List<SchemaTableName> listTables(ConnectorSession session, Optional<String> schemaName)
     {
-        return schemaName.map(Collections::singletonList)
+        ImmutableList.Builder<SchemaTableName> tablesListBuilder = ImmutableList.builder();
+        schemaName.map(Collections::singletonList)
                 .orElseGet(metastore::getAllDatabases)
                 .stream()
-                .flatMap(schema -> metastore.getTablesWithParameter(schema, TABLE_TYPE_PROP, ICEBERG_TABLE_TYPE_VALUE).stream()
-                        .map(table -> new SchemaTableName(schema, table))
-                        .collect(toList())
-                        .stream())
-                .collect(toList());
+                .flatMap(schema -> Stream.concat(
+                    // Get tables with parameter table_type set to  "ICEBERG" or "iceberg". This is required because
+                    // Presto uses lowercase value whereas Spark and Flink use uppercase.
+                    metastore.getTablesWithParameter(schema, TABLE_TYPE_PROP, ICEBERG_TABLE_TYPE_VALUE.toLowerCase(Locale.ENGLISH))
+                        .stream().map(table -> new SchemaTableName(schema, table)),
+                    metastore.getTablesWithParameter(schema, TABLE_TYPE_PROP, ICEBERG_TABLE_TYPE_VALUE.toUpperCase(Locale.ENGLISH))
+                        .stream().map(table -> new SchemaTableName(schema, table)))
+                    .distinct())  // distinct() to avoid duplicates for case-insensitive HMS backends
+                .forEach(tablesListBuilder::add);
+
+        schemaName.map(Collections::singletonList)
+                .orElseGet(metastore::getAllDatabases).stream()
+                .flatMap(schema -> metastore.getAllViews(schema).stream()
+                    .map(table -> new SchemaTableName(schema, table)))
+                .forEach(tablesListBuilder::add);
+        return tablesListBuilder.build();
     }
 
     @Override
