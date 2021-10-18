@@ -16,6 +16,7 @@ package io.trino.plugin.hive.parquet;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.airlift.slice.Slice;
 import io.trino.parquet.Field;
 import io.trino.parquet.ParquetCorruptionException;
 import io.trino.parquet.ParquetDataSource;
@@ -206,6 +207,38 @@ public class ParquetPageSourceFactory
         ParquetReader parquetReader;
         ParquetDataSource dataSource = null;
         try {
+            boolean bloomNotMatch = false;
+
+            try {
+                Bloom bloom = null;
+                for (Entry<HiveColumnHandle, Domain> entry : effectivePredicate.getDomains().get().entrySet()) {
+                    HiveColumnHandle columnHandle = entry.getKey();
+                    if (!columnHandle.getHiveType().getCategory().equals(PRIMITIVE)) {
+                        continue;
+                    }
+                    Domain v = entry.getValue();
+                    if (v.isSingleValue()) {
+                        String columnName = columnHandle.getBaseColumnName();
+                        if (bloom == null) {
+                            bloom = new Bloom(hdfsEnvironment, path, identity, configuration);
+                        }
+                        try {
+                            String target = ((Slice) v.getSingleValue()).toStringUtf8();
+                            bloomNotMatch = bloom.notMatches(columnName, target);
+                        }
+                        catch (Exception e) {
+                            continue;
+                        }
+
+                        if (bloomNotMatch) {
+                            return new ReaderPageSource(new EmptyPageSource(), Optional.empty());
+                        }
+                    }
+                }
+            }
+            catch (Exception e) {
+            }
+
             FileSystem fileSystem = hdfsEnvironment.getFileSystem(identity, path, configuration);
             FSDataInputStream inputStream = hdfsEnvironment.doAs(identity, () -> fileSystem.open(path));
             dataSource = new HdfsParquetDataSource(new ParquetDataSourceId(path.toString()), estimatedFileSize, inputStream, stats, options);

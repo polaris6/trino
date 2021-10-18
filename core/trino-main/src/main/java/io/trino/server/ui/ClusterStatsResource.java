@@ -31,7 +31,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.MediaType;
 
-import static io.trino.server.security.ResourceSecurity.AccessType.WEB_UI;
+import static io.trino.server.security.ResourceSecurity.AccessType.PUBLIC;
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
@@ -52,7 +52,7 @@ public class ClusterStatsResource
         this.clusterMemoryManager = requireNonNull(clusterMemoryManager, "clusterMemoryManager is null");
     }
 
-    @ResourceSecurity(WEB_UI)
+    @ResourceSecurity(PUBLIC)
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public ClusterStats getClusterStats()

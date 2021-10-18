@@ -26,7 +26,7 @@ import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 
 import static io.airlift.units.Duration.nanosSince;
-import static io.trino.server.security.ResourceSecurity.AccessType.WEB_UI;
+import static io.trino.server.security.ResourceSecurity.AccessType.PUBLIC;
 import static java.util.Objects.requireNonNull;
 import static javax.ws.rs.core.MediaType.APPLICATION_JSON;
 
@@ -44,7 +44,7 @@ public class ClusterResource
         this.environment = requireNonNull(nodeInfo, "nodeInfo is null").getEnvironment();
     }
 
-    @ResourceSecurity(WEB_UI)
+    @ResourceSecurity(PUBLIC)
     @GET
     @Produces(APPLICATION_JSON)
     public ClusterInfo getInfo()

@@ -10,7 +10,7 @@
 
     <groupId>io.trino</groupId>
     <artifactId>trino-root</artifactId>
-    <version>363</version>
+    <version>363-bk-1.0.0</version>
 
     <name>trino-root</name>
     <description>Trino</description>
@@ -30,7 +30,7 @@
     <scm>
         <connection>scm:git:git://github.com/trinodb/trino.git</connection>
         <url>https://github.com/trinodb/trino</url>
-        <tag>363</tag>
+        <tag>363-bk-1.0.0</tag>
     </scm>
 
     <properties>
@@ -92,9 +92,7 @@
         <module>core/trino-parser</module>
         <module>core/trino-server</module>
         <module>core/trino-server-main</module>
-        <module>core/trino-server-rpm</module>
         <module>core/trino-spi</module>
-        <module>docs</module>
         <module>lib/trino-array</module>
         <module>lib/trino-geospatial-toolkit</module>
         <module>lib/trino-matching</module>
@@ -121,6 +119,7 @@
         <module>plugin/trino-hive-hadoop2</module>
         <module>plugin/trino-http-event-listener</module>
         <module>plugin/trino-iceberg</module>
+        <module>plugin/trino-ignite</module>
         <module>plugin/trino-jmx</module>
         <module>plugin/trino-kafka</module>
         <module>plugin/trino-kinesis</module>
@@ -1341,6 +1340,12 @@
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-math3</artifactId>
                 <version>3.6.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.ignite</groupId>
+                <artifactId>ignite-core</artifactId>
+                <version>2.7.6</version>
             </dependency>
 
             <dependency>
