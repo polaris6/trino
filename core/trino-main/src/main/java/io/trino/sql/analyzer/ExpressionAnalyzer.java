@@ -2014,8 +2014,6 @@ public class ExpressionAnalyzer
                         });
             }
 
-            Type declaredValueType = process(value, context);
-
             if (valueList instanceof InListExpression) {
                 InListExpression inListExpression = (InListExpression) valueList;
                 List<Expression> replacedValueList = new ArrayList<>();
@@ -2030,6 +2028,7 @@ public class ExpressionAnalyzer
                         ImmutableList.<Expression>builder().add(value).addAll(inListExpression.getValues()).build());
             }
             else if (valueList instanceof SubqueryExpression) {
+                Type declaredValueType = process(value, context);
                 subqueryInPredicates.add(NodeRef.of(node));
                 analyzePredicateWithSubquery(node, declaredValueType, (SubqueryExpression) valueList, context);
             }

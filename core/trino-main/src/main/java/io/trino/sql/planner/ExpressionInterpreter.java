@@ -618,7 +618,6 @@ public class ExpressionInterpreter
             List<Object> values = new ArrayList<>(valueList.getValues().size());
             List<Type> types = new ArrayList<>(valueList.getValues().size());
 
-            ResolvedFunction equalsOperator = metadata.resolveOperator(OperatorType.EQUAL, types(node.getValue(), valueList));
             for (Expression expression : valueList.getValues()) {
                 // Use process() instead of processWithExceptionHandling() for processing in-list items.
                 // Do not handle exceptions thrown while processing a single in-list expression,
@@ -637,6 +636,7 @@ public class ExpressionInterpreter
                     hasNullValue = true;
                 }
                 else {
+                    ResolvedFunction equalsOperator = metadata.resolveOperator(OperatorType.EQUAL, types(node.getValue(), expression));
                     Boolean result = (Boolean) functionInvoker.invoke(equalsOperator, session, ImmutableList.of(value, inValue));
                     if (result == null) {
                         hasNullValue = true;
