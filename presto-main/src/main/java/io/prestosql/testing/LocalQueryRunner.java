@@ -45,10 +45,12 @@ import io.prestosql.eventlistener.EventListenerConfig;
 import io.prestosql.eventlistener.EventListenerManager;
 import io.prestosql.execution.CommentTask;
 import io.prestosql.execution.CommitTask;
+import io.prestosql.execution.CreateCatalogTask;
 import io.prestosql.execution.CreateTableTask;
 import io.prestosql.execution.CreateViewTask;
 import io.prestosql.execution.DataDefinitionTask;
 import io.prestosql.execution.DeallocateTask;
+import io.prestosql.execution.DropCatalogTask;
 import io.prestosql.execution.DropTableTask;
 import io.prestosql.execution.DropViewTask;
 import io.prestosql.execution.Lifespan;
@@ -79,6 +81,7 @@ import io.prestosql.memory.NodeMemoryConfig;
 import io.prestosql.metadata.AnalyzePropertyManager;
 import io.prestosql.metadata.CatalogManager;
 import io.prestosql.metadata.ColumnPropertyManager;
+import io.prestosql.metadata.DynamicCatalogManager;
 import io.prestosql.metadata.HandleResolver;
 import io.prestosql.metadata.InMemoryNodeManager;
 import io.prestosql.metadata.Metadata;
@@ -153,9 +156,11 @@ import io.prestosql.sql.planner.planprinter.PlanPrinter;
 import io.prestosql.sql.planner.sanity.PlanSanityChecker;
 import io.prestosql.sql.tree.Comment;
 import io.prestosql.sql.tree.Commit;
+import io.prestosql.sql.tree.CreateCatalog;
 import io.prestosql.sql.tree.CreateTable;
 import io.prestosql.sql.tree.CreateView;
 import io.prestosql.sql.tree.Deallocate;
+import io.prestosql.sql.tree.DropCatalog;
 import io.prestosql.sql.tree.DropTable;
 import io.prestosql.sql.tree.DropView;
 import io.prestosql.sql.tree.Prepare;
@@ -260,6 +265,8 @@ public class LocalQueryRunner
     private boolean printPlan;
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    private final DynamicCatalogManager dynamicCatalogManager = new TestingDynamicCatalogManager();
 
     public static LocalQueryRunner create(Session defaultSession)
     {
@@ -373,7 +380,8 @@ public class LocalQueryRunner
                 new CertificateAuthenticatorManager(),
                 eventListenerManager,
                 new GroupProviderManager(),
-                new SessionPropertyDefaults(nodeInfo));
+                new SessionPropertyDefaults(nodeInfo),
+                new TestingDynamicCatalogManager());
 
         connectorManager.addConnectorFactory(globalSystemConnectorFactory, globalSystemConnectorFactory.getClass()::getClassLoader);
         connectorManager.createCatalog(GlobalSystemConnector.NAME, GlobalSystemConnector.NAME, ImmutableMap.of());
@@ -425,6 +433,8 @@ public class LocalQueryRunner
                 .put(Commit.class, new CommitTask())
                 .put(Rollback.class, new RollbackTask())
                 .put(SetPath.class, new SetPathTask())
+                .put(CreateCatalog.class, new CreateCatalogTask(dynamicCatalogManager))
+                .put(DropCatalog.class, new DropCatalogTask(dynamicCatalogManager))
                 .build();
 
         SpillerStats spillerStats = new SpillerStats();

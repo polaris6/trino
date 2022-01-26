@@ -146,6 +146,7 @@
         <module>presto-oracle</module>
         <module>presto-druid</module>
         <module>presto-ignite</module>
+        <module>presto-catalog-managers</module>
     </modules>
 
     <dependencyManagement>
@@ -180,6 +181,19 @@
                 <groupId>io.prestosql</groupId>
                 <artifactId>presto-password-authenticators</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.prestosql</groupId>
+                <artifactId>presto-catalog-managers</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.prestosql</groupId>
+                <artifactId>presto-catalog-managers</artifactId>
+                <version>${project.version}</version>
+                <type>test-jar</type>
             </dependency>
 
             <dependency>

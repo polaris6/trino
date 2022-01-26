@@ -258,4 +258,11 @@
             <unpack />
         </artifact>
     </artifactSet>
+
+    <artifactSet to="plugin/presto-catalog-managers">
+        <artifact id="${project.groupId}:presto-catalog-managers:zip:${project.version}">
+            <unpack />
+        </artifact>
+    </artifactSet>
+
 </runtime>

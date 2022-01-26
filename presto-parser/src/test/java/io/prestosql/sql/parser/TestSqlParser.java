@@ -30,12 +30,14 @@ import io.prestosql.sql.tree.BooleanLiteral;
 import io.prestosql.sql.tree.Call;
 import io.prestosql.sql.tree.CallArgument;
 import io.prestosql.sql.tree.Cast;
+import io.prestosql.sql.tree.CatalogElement;
 import io.prestosql.sql.tree.CharLiteral;
 import io.prestosql.sql.tree.CoalesceExpression;
 import io.prestosql.sql.tree.ColumnDefinition;
 import io.prestosql.sql.tree.Comment;
 import io.prestosql.sql.tree.Commit;
 import io.prestosql.sql.tree.ComparisonExpression;
+import io.prestosql.sql.tree.CreateCatalog;
 import io.prestosql.sql.tree.CreateRole;
 import io.prestosql.sql.tree.CreateSchema;
 import io.prestosql.sql.tree.CreateTable;
@@ -50,6 +52,7 @@ import io.prestosql.sql.tree.DereferenceExpression;
 import io.prestosql.sql.tree.DescribeInput;
 import io.prestosql.sql.tree.DescribeOutput;
 import io.prestosql.sql.tree.DoubleLiteral;
+import io.prestosql.sql.tree.DropCatalog;
 import io.prestosql.sql.tree.DropColumn;
 import io.prestosql.sql.tree.DropRole;
 import io.prestosql.sql.tree.DropSchema;
@@ -124,6 +127,7 @@ import io.prestosql.sql.tree.SetRole;
 import io.prestosql.sql.tree.SetSession;
 import io.prestosql.sql.tree.ShowCatalogs;
 import io.prestosql.sql.tree.ShowColumns;
+import io.prestosql.sql.tree.ShowCreateCatalog;
 import io.prestosql.sql.tree.ShowFunctions;
 import io.prestosql.sql.tree.ShowGrants;
 import io.prestosql.sql.tree.ShowRoleGrants;
@@ -768,6 +772,25 @@ public class TestSqlParser
         assertStatement("SHOW CATALOGS", new ShowCatalogs(Optional.empty(), Optional.empty()));
         assertStatement("SHOW CATALOGS LIKE '%'", new ShowCatalogs(Optional.of("%"), Optional.empty()));
         assertStatement("SHOW CATALOGS LIKE '%$_%' ESCAPE '$'", new ShowCatalogs(Optional.of("%$_%"), Optional.of("$")));
+    }
+
+    @Test
+    public void testCreateCatalog()
+    {
+        List<CatalogElement> catalogElements = Lists.newArrayList(new CatalogElement("connector.name", "123"), new CatalogElement("metastore.uri", "thrift://localhost:9083"));
+        assertStatement("CREATE CATALOG test_catalog('connector.name'='123','metastore.uri'='thrift://localhost:9083')", new CreateCatalog(new Identifier("test_catalog"), catalogElements));
+    }
+
+    @Test
+    public void testDropCatalog()
+    {
+        assertStatement("DROP CATALOG test_catalog", new DropCatalog(new Identifier("test_catalog")));
+    }
+
+    @Test
+    public void testShowCreateCatalog()
+    {
+        assertStatement("SHOW CREATE CATALOG test_catalog", new ShowCreateCatalog(new Identifier("test_catalog")));
     }
 
     @Test

@@ -14,6 +14,7 @@
 package io.prestosql.spi;
 
 import io.prestosql.spi.block.BlockEncoding;
+import io.prestosql.spi.catalog.CatalogConfigurationManagerFactory;
 import io.prestosql.spi.connector.ConnectorFactory;
 import io.prestosql.spi.eventlistener.EventListenerFactory;
 import io.prestosql.spi.resourcegroups.ResourceGroupConfigurationManagerFactory;
@@ -88,6 +89,11 @@ public interface Plugin
     }
 
     default Iterable<SessionPropertyConfigurationManagerFactory> getSessionPropertyConfigurationManagerFactories()
+    {
+        return emptyList();
+    }
+
+    default Iterable<CatalogConfigurationManagerFactory> getCatalogConfigurationManagerFactories()
     {
         return emptyList();
     }

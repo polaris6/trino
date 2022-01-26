@@ -378,6 +378,12 @@ public abstract class AbstractMockMetadata
     }
 
     @Override
+    public Optional<Map<String, String>> getCatalogProperties(Session session, String catalogName)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
     public List<QualifiedObjectName> listViews(Session session, QualifiedTablePrefix prefix)
     {
         throw new UnsupportedOperationException();

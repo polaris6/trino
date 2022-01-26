@@ -22,9 +22,11 @@ import io.prestosql.sql.tree.Analyze;
 import io.prestosql.sql.tree.AstVisitor;
 import io.prestosql.sql.tree.Call;
 import io.prestosql.sql.tree.CallArgument;
+import io.prestosql.sql.tree.CatalogElement;
 import io.prestosql.sql.tree.ColumnDefinition;
 import io.prestosql.sql.tree.Comment;
 import io.prestosql.sql.tree.Commit;
+import io.prestosql.sql.tree.CreateCatalog;
 import io.prestosql.sql.tree.CreateRole;
 import io.prestosql.sql.tree.CreateSchema;
 import io.prestosql.sql.tree.CreateTable;
@@ -34,6 +36,7 @@ import io.prestosql.sql.tree.Deallocate;
 import io.prestosql.sql.tree.Delete;
 import io.prestosql.sql.tree.DescribeInput;
 import io.prestosql.sql.tree.DescribeOutput;
+import io.prestosql.sql.tree.DropCatalog;
 import io.prestosql.sql.tree.DropColumn;
 import io.prestosql.sql.tree.DropRole;
 import io.prestosql.sql.tree.DropSchema;
@@ -91,6 +94,7 @@ import io.prestosql.sql.tree.SetSession;
 import io.prestosql.sql.tree.ShowCatalogs;
 import io.prestosql.sql.tree.ShowColumns;
 import io.prestosql.sql.tree.ShowCreate;
+import io.prestosql.sql.tree.ShowCreateCatalog;
 import io.prestosql.sql.tree.ShowFunctions;
 import io.prestosql.sql.tree.ShowGrants;
 import io.prestosql.sql.tree.ShowRoleGrants;
@@ -691,6 +695,44 @@ public final class SqlFormatter
                     builder.append(" ESCAPE ")
                             .append(formatStringLiteral(value)));
 
+            return null;
+        }
+
+        @Override
+        protected Void visitCreateCatalog(CreateCatalog node, Integer context)
+        {
+            builder.append("CREATE CATALOG ")
+                    .append(node.getIdentifier().getValue())
+                    .append("(");
+            List<CatalogElement> catalogElements = node.getCatalogElements();
+            for (int i = 0; i < catalogElements.size(); i++) {
+                visitCatalogElement(catalogElements.get(i), context);
+                if (i < catalogElements.size() - 1) {
+                    builder.append(",");
+                }
+            }
+            builder.append(")");
+            return null;
+        }
+
+        @Override
+        protected Void visitDropCatalog(DropCatalog node, Integer context)
+        {
+            builder.append("DROP CATALOG ").append(node.getCatalogName().getValue());
+            return null;
+        }
+
+        @Override
+        protected Void visitShowCreateCatalog(ShowCreateCatalog node, Integer context)
+        {
+            builder.append("SHOW CREATE CATALOG ").append(node.getCatalogName().getValue());
+            return null;
+        }
+
+        @Override
+        protected Void visitCatalogElement(CatalogElement node, Integer context)
+        {
+            builder.append(formatStringLiteral(node.getName())).append("=").append(formatStringLiteral(node.getValue()));
             return null;
         }
 

@@ -18,6 +18,7 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import static java.util.Collections.nCopies;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
@@ -85,7 +86,7 @@ public class TestSqlParserErrorHandling
                 {"select foo(DISTINCT ,1)",
                         "line 1:21: mismatched input ','. Expecting: <expression>"},
                 {"CREATE )",
-                        "line 1:8: mismatched input ')'. Expecting: 'OR', 'ROLE', 'SCHEMA', 'TABLE', 'VIEW'"},
+                        "line 1:8: mismatched input ')'. Expecting: 'CATALOG', 'OR', 'ROLE', 'SCHEMA', 'TABLE', 'VIEW'"},
                 {"CREATE TABLE ) AS (VALUES 1)",
                         "line 1:14: mismatched input ')'. Expecting: 'IF', <identifier>"},
                 {"CREATE TABLE foo ",
@@ -195,6 +196,7 @@ public class TestSqlParserErrorHandling
                 "line 24:1: mismatched input 'GROUP'. Expecting: ')', ',', '.', 'FILTER', 'IGNORE', 'OVER', 'RESPECT', '['");
     }
 
+    /*
     @Test(dataProvider = "statements")
     public void testStatement(String sql, String error)
     {
@@ -205,6 +207,15 @@ public class TestSqlParserErrorHandling
         catch (ParsingException e) {
             assertEquals(e.getMessage(), error, "Error message mismatch for query:\n\n" + sql + "\n\n");
         }
+    }
+    */
+
+    @Test(dataProvider = "statements")
+    public void testStatement(String sql, String error)
+    {
+        assertThatThrownBy(() -> SQL_PARSER.createStatement(sql, PARSING_OPTIONS))
+                .isInstanceOf(ParsingException.class)
+                .hasMessage(error);
     }
 
     @Test(dataProvider = "expressions")

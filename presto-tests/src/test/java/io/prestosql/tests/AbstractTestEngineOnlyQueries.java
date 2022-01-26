@@ -890,6 +890,8 @@ public abstract class AbstractTestEngineOnlyQueries
         assertDescribeOutputEmpty("PREPARE test FROM SELECT * FROM orders");
         assertDescribeOutputEmpty("EXECUTE test");
         assertDescribeOutputEmpty("DEALLOCATE PREPARE test");
+        assertDescribeOutputEmpty("CREATE CATALOG test('connector.name'='test')");
+        assertDescribeOutputEmpty("DROP CATALOG test");
     }
 
     private void assertDescribeOutputRowCount(@Language("SQL") String sql)

@@ -70,6 +70,18 @@ public final class MetadataListing
         return result.build();
     }
 
+    public static Optional<Map<String, String>> listCatalogProperties(Session session, Metadata metadata, AccessControl accessControl, String catalogName)
+    {
+        Map<String, CatalogName> catalogNames = metadata.getCatalogNames(session);
+        Set<String> allowedCatalogs = accessControl.filterCatalogs(session.getIdentity(), catalogNames.keySet());
+        if (allowedCatalogs.contains(catalogName)) {
+            return metadata.getCatalogProperties(session, catalogName);
+        }
+        else {
+            return Optional.empty();
+        }
+    }
+
     public static SortedSet<String> listSchemas(Session session, Metadata metadata, AccessControl accessControl, String catalogName)
     {
         return listSchemas(session, metadata, accessControl, catalogName, Optional.empty());

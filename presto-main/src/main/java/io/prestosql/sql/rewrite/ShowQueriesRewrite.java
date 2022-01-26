@@ -46,7 +46,9 @@ import io.prestosql.sql.tree.AllColumns;
 import io.prestosql.sql.tree.ArrayConstructor;
 import io.prestosql.sql.tree.AstVisitor;
 import io.prestosql.sql.tree.BooleanLiteral;
+import io.prestosql.sql.tree.CatalogElement;
 import io.prestosql.sql.tree.ColumnDefinition;
+import io.prestosql.sql.tree.CreateCatalog;
 import io.prestosql.sql.tree.CreateSchema;
 import io.prestosql.sql.tree.CreateTable;
 import io.prestosql.sql.tree.CreateView;
@@ -67,6 +69,7 @@ import io.prestosql.sql.tree.Relation;
 import io.prestosql.sql.tree.ShowCatalogs;
 import io.prestosql.sql.tree.ShowColumns;
 import io.prestosql.sql.tree.ShowCreate;
+import io.prestosql.sql.tree.ShowCreateCatalog;
 import io.prestosql.sql.tree.ShowFunctions;
 import io.prestosql.sql.tree.ShowGrants;
 import io.prestosql.sql.tree.ShowRoleGrants;
@@ -86,6 +89,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Strings.nullToEmpty;
 import static com.google.common.collect.ImmutableList.toImmutableList;
@@ -367,6 +371,18 @@ final class ShowQueriesRewrite
                     aliased(new Values(rows), "catalogs", ImmutableList.of("Catalog")),
                     predicate,
                     Optional.of(ordering(ascending("Catalog"))));
+        }
+
+        @Override
+        protected Node visitShowCreateCatalog(ShowCreateCatalog node, Void context)
+        {
+            final String catalogName = node.getCatalogName().getValue();
+            Optional<Map<String, String>> properties = metadata.getCatalogProperties(session, catalogName);
+            final List<CatalogElement> catalogElements = properties.get().entrySet().stream()
+                    .map(entry -> new CatalogElement(entry.getKey(), entry.getValue()))
+                    .collect(Collectors.toList());
+            final CreateCatalog catalog = new CreateCatalog(new Identifier(catalogName), catalogElements);
+            return singleValueQuery("Create Catalog", formatSql(catalog));
         }
 
         @Override

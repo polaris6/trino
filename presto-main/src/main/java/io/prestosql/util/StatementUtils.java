@@ -20,6 +20,7 @@ import io.prestosql.sql.tree.Analyze;
 import io.prestosql.sql.tree.Call;
 import io.prestosql.sql.tree.Comment;
 import io.prestosql.sql.tree.Commit;
+import io.prestosql.sql.tree.CreateCatalog;
 import io.prestosql.sql.tree.CreateRole;
 import io.prestosql.sql.tree.CreateSchema;
 import io.prestosql.sql.tree.CreateTable;
@@ -29,6 +30,7 @@ import io.prestosql.sql.tree.Deallocate;
 import io.prestosql.sql.tree.Delete;
 import io.prestosql.sql.tree.DescribeInput;
 import io.prestosql.sql.tree.DescribeOutput;
+import io.prestosql.sql.tree.DropCatalog;
 import io.prestosql.sql.tree.DropColumn;
 import io.prestosql.sql.tree.DropRole;
 import io.prestosql.sql.tree.DropSchema;
@@ -55,6 +57,7 @@ import io.prestosql.sql.tree.SetSession;
 import io.prestosql.sql.tree.ShowCatalogs;
 import io.prestosql.sql.tree.ShowColumns;
 import io.prestosql.sql.tree.ShowCreate;
+import io.prestosql.sql.tree.ShowCreateCatalog;
 import io.prestosql.sql.tree.ShowFunctions;
 import io.prestosql.sql.tree.ShowGrants;
 import io.prestosql.sql.tree.ShowRoleGrants;
@@ -101,6 +104,7 @@ public final class StatementUtils
         builder.put(ShowColumns.class, QueryType.DESCRIBE);
         builder.put(DescribeInput.class, QueryType.DESCRIBE);
         builder.put(DescribeOutput.class, QueryType.DESCRIBE);
+        builder.put(ShowCreateCatalog.class, QueryType.DESCRIBE);
 
         builder.put(CreateSchema.class, QueryType.DATA_DEFINITION);
         builder.put(DropSchema.class, QueryType.DATA_DEFINITION);
@@ -132,6 +136,8 @@ public final class StatementUtils
         builder.put(Revoke.class, QueryType.DATA_DEFINITION);
         builder.put(Prepare.class, QueryType.DATA_DEFINITION);
         builder.put(Deallocate.class, QueryType.DATA_DEFINITION);
+        builder.put(CreateCatalog.class, QueryType.DATA_DEFINITION);
+        builder.put(DropCatalog.class, QueryType.DATA_DEFINITION);
         builder.put(SetPath.class, QueryType.DATA_DEFINITION);
         STATEMENT_QUERY_TYPES = builder.build();
     }

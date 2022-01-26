@@ -22,6 +22,7 @@ import io.airlift.resolver.DefaultArtifact;
 import io.prestosql.connector.ConnectorManager;
 import io.prestosql.eventlistener.EventListenerManager;
 import io.prestosql.execution.resourcegroups.ResourceGroupManager;
+import io.prestosql.metadata.DynamicCatalogManager;
 import io.prestosql.metadata.MetadataManager;
 import io.prestosql.security.AccessControlManager;
 import io.prestosql.security.GroupProviderManager;
@@ -29,6 +30,7 @@ import io.prestosql.server.security.CertificateAuthenticatorManager;
 import io.prestosql.server.security.PasswordAuthenticatorManager;
 import io.prestosql.spi.Plugin;
 import io.prestosql.spi.block.BlockEncoding;
+import io.prestosql.spi.catalog.CatalogConfigurationManagerFactory;
 import io.prestosql.spi.classloader.ThreadContextClassLoader;
 import io.prestosql.spi.connector.ConnectorFactory;
 import io.prestosql.spi.eventlistener.EventListenerFactory;
@@ -83,6 +85,7 @@ public class PluginManager
     private final EventListenerManager eventListenerManager;
     private final GroupProviderManager groupProviderManager;
     private final SessionPropertyDefaults sessionPropertyDefaults;
+    private final DynamicCatalogManager dynamicCatalogManager;
     private final ArtifactResolver resolver;
     private final File installedPluginsDir;
     private final List<String> plugins;
@@ -101,7 +104,8 @@ public class PluginManager
             CertificateAuthenticatorManager certificateAuthenticatorManager,
             EventListenerManager eventListenerManager,
             GroupProviderManager groupProviderManager,
-            SessionPropertyDefaults sessionPropertyDefaults)
+            SessionPropertyDefaults sessionPropertyDefaults,
+            DynamicCatalogManager dynamicCatalogManager)
     {
         requireNonNull(nodeInfo, "nodeInfo is null");
         requireNonNull(config, "config is null");
@@ -124,6 +128,7 @@ public class PluginManager
         this.eventListenerManager = requireNonNull(eventListenerManager, "eventListenerManager is null");
         this.groupProviderManager = requireNonNull(groupProviderManager, "groupProviderManager is null");
         this.sessionPropertyDefaults = requireNonNull(sessionPropertyDefaults, "sessionPropertyDefaults is null");
+        this.dynamicCatalogManager = requireNonNull(dynamicCatalogManager, "dynamicCatalogManager is null");
     }
 
     public void loadPlugins()
@@ -236,6 +241,11 @@ public class PluginManager
         for (GroupProviderFactory groupProviderFactory : plugin.getGroupProviderFactories()) {
             log.info("Registering group provider %s", groupProviderFactory.getName());
             groupProviderManager.addGroupProviderFactory(groupProviderFactory);
+        }
+
+        for (CatalogConfigurationManagerFactory configurationManagerFactory : plugin.getCatalogConfigurationManagerFactories()) {
+            log.info("Registering catalog configuration manager %s", configurationManagerFactory.getName());
+            dynamicCatalogManager.addCatalogConfigurationManagerFactory(configurationManagerFactory);
         }
     }
 

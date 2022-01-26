@@ -33,6 +33,7 @@ import java.util.function.Supplier;
 import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Strings.isNullOrEmpty;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.nio.file.Files.readAllBytes;
 import static java.util.Arrays.asList;
 import static java.util.Objects.requireNonNull;
@@ -43,13 +44,17 @@ public class RedisTableDescriptionSupplier
     private static final Logger log = Logger.get(RedisTableDescriptionSupplier.class);
 
     private final RedisConnectorConfig redisConnectorConfig;
+    private final RedisTableConfigManager redisTableConfigManager;
     private final JsonCodec<RedisTableDescription> tableDescriptionCodec;
+    private final boolean useConfigDb;
 
     @Inject
-    RedisTableDescriptionSupplier(RedisConnectorConfig redisConnectorConfig, JsonCodec<RedisTableDescription> tableDescriptionCodec)
+    RedisTableDescriptionSupplier(RedisConnectorConfig redisConnectorConfig, RedisTableConfigManager redisTableConfigManager, JsonCodec<RedisTableDescription> tableDescriptionCodec)
     {
         this.redisConnectorConfig = requireNonNull(redisConnectorConfig, "redisConnectorConfig is null");
+        this.redisTableConfigManager = requireNonNull(redisTableConfigManager, "redisTableConfigManager is null");
         this.tableDescriptionCodec = requireNonNull(tableDescriptionCodec, "tableDescriptionCodec is null");
+        useConfigDb = redisConnectorConfig.isUseConfigDb();
     }
 
     @Override
@@ -57,51 +62,60 @@ public class RedisTableDescriptionSupplier
     {
         ImmutableMap.Builder<SchemaTableName, RedisTableDescription> builder = ImmutableMap.builder();
 
-        try {
-            for (File file : listFiles(redisConnectorConfig.getTableDescriptionDir())) {
-                if (file.isFile() && file.getName().endsWith(".json")) {
-                    RedisTableDescription table = tableDescriptionCodec.fromJson(readAllBytes(file.toPath()));
-                    String schemaName = firstNonNull(table.getSchemaName(), redisConnectorConfig.getDefaultSchema());
-                    log.debug("Redis table %s.%s: %s", schemaName, table.getTableName(), table);
-                    builder.put(new SchemaTableName(schemaName, table.getTableName()), table);
+        if (useConfigDb) {
+            List<String> tablesConfigList = redisTableConfigManager.getTablesConfig(redisConnectorConfig.getClusterName());
+            for (String tableConfig : tablesConfigList) {
+                RedisTableDescription table = tableDescriptionCodec.fromJson(tableConfig.getBytes(UTF_8));
+                String schemaName = table.getSchemaName();
+                builder.put(new SchemaTableName(schemaName, table.getTableName()), table);
+            }
+        }
+        else {
+            try {
+                for (File file : listFiles(redisConnectorConfig.getTableDescriptionDir())) {
+                    if (file.isFile() && file.getName().endsWith(".json")) {
+                        RedisTableDescription table = tableDescriptionCodec.fromJson(readAllBytes(file.toPath()));
+                        String schemaName = firstNonNull(table.getSchemaName(), redisConnectorConfig.getDefaultSchema());
+                        log.debug("Redis table %s.%s: %s", schemaName, table.getTableName(), table);
+                        builder.put(new SchemaTableName(schemaName, table.getTableName()), table);
+                    }
+                }
+
+                Map<SchemaTableName, RedisTableDescription> tableDefinitions = builder.build();
+
+                log.debug("Loaded table definitions: %s", tableDefinitions.keySet());
+
+                builder = ImmutableMap.builder();
+                for (String definedTable : redisConnectorConfig.getTableNames()) {
+                    SchemaTableName tableName;
+                    try {
+                        tableName = parseTableName(definedTable);
+                    }
+                    catch (IllegalArgumentException iae) {
+                        tableName = new SchemaTableName(redisConnectorConfig.getDefaultSchema(), definedTable);
+                    }
+
+                    if (tableDefinitions.containsKey(tableName)) {
+                        RedisTableDescription redisTable = tableDefinitions.get(tableName);
+                        log.debug("Found Table definition for %s: %s", tableName, redisTable);
+                        builder.put(tableName, redisTable);
+                    }
+                    else {
+                        // A dummy table definition only supports the internal columns.
+                        log.debug("Created dummy Table definition for %s", tableName);
+                        builder.put(tableName, new RedisTableDescription(tableName.getTableName(),
+                                tableName.getSchemaName(),
+                                new RedisTableFieldGroup(DummyRowDecoder.NAME, null, ImmutableList.of()),
+                                new RedisTableFieldGroup(DummyRowDecoder.NAME, null, ImmutableList.of())));
+                    }
                 }
             }
-
-            Map<SchemaTableName, RedisTableDescription> tableDefinitions = builder.build();
-
-            log.debug("Loaded table definitions: %s", tableDefinitions.keySet());
-
-            builder = ImmutableMap.builder();
-            for (String definedTable : redisConnectorConfig.getTableNames()) {
-                SchemaTableName tableName;
-                try {
-                    tableName = parseTableName(definedTable);
-                }
-                catch (IllegalArgumentException iae) {
-                    tableName = new SchemaTableName(redisConnectorConfig.getDefaultSchema(), definedTable);
-                }
-
-                if (tableDefinitions.containsKey(tableName)) {
-                    RedisTableDescription redisTable = tableDefinitions.get(tableName);
-                    log.debug("Found Table definition for %s: %s", tableName, redisTable);
-                    builder.put(tableName, redisTable);
-                }
-                else {
-                    // A dummy table definition only supports the internal columns.
-                    log.debug("Created dummy Table definition for %s", tableName);
-                    builder.put(tableName, new RedisTableDescription(tableName.getTableName(),
-                            tableName.getSchemaName(),
-                            new RedisTableFieldGroup(DummyRowDecoder.NAME, null, ImmutableList.of()),
-                            new RedisTableFieldGroup(DummyRowDecoder.NAME, null, ImmutableList.of())));
-                }
+            catch (IOException e) {
+                log.warn(e, "Error: ");
+                throw new UncheckedIOException(e);
             }
-
-            return builder.build();
         }
-        catch (IOException e) {
-            log.warn(e, "Error: ");
-            throw new UncheckedIOException(e);
-        }
+        return builder.build();
     }
 
     private static List<File> listFiles(File dir)

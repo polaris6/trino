@@ -32,12 +32,14 @@ import io.prestosql.sql.tree.BooleanLiteral;
 import io.prestosql.sql.tree.Call;
 import io.prestosql.sql.tree.CallArgument;
 import io.prestosql.sql.tree.Cast;
+import io.prestosql.sql.tree.CatalogElement;
 import io.prestosql.sql.tree.CharLiteral;
 import io.prestosql.sql.tree.CoalesceExpression;
 import io.prestosql.sql.tree.ColumnDefinition;
 import io.prestosql.sql.tree.Comment;
 import io.prestosql.sql.tree.Commit;
 import io.prestosql.sql.tree.ComparisonExpression;
+import io.prestosql.sql.tree.CreateCatalog;
 import io.prestosql.sql.tree.CreateRole;
 import io.prestosql.sql.tree.CreateSchema;
 import io.prestosql.sql.tree.CreateTable;
@@ -57,6 +59,7 @@ import io.prestosql.sql.tree.DereferenceExpression;
 import io.prestosql.sql.tree.DescribeInput;
 import io.prestosql.sql.tree.DescribeOutput;
 import io.prestosql.sql.tree.DoubleLiteral;
+import io.prestosql.sql.tree.DropCatalog;
 import io.prestosql.sql.tree.DropColumn;
 import io.prestosql.sql.tree.DropRole;
 import io.prestosql.sql.tree.DropSchema;
@@ -150,6 +153,7 @@ import io.prestosql.sql.tree.SetSession;
 import io.prestosql.sql.tree.ShowCatalogs;
 import io.prestosql.sql.tree.ShowColumns;
 import io.prestosql.sql.tree.ShowCreate;
+import io.prestosql.sql.tree.ShowCreateCatalog;
 import io.prestosql.sql.tree.ShowFunctions;
 import io.prestosql.sql.tree.ShowGrants;
 import io.prestosql.sql.tree.ShowRoleGrants;
@@ -594,6 +598,30 @@ class AstBuilder
     public Node visitProperty(SqlBaseParser.PropertyContext context)
     {
         return new Property(getLocation(context), (Identifier) visit(context.identifier()), (Expression) visit(context.expression()));
+    }
+
+    @Override
+    public Node visitCreateCatalog(SqlBaseParser.CreateCatalogContext context)
+    {
+        return new CreateCatalog(getLocation(context), (Identifier) visit(context.identifier()), visit(context.catalogElement(), CatalogElement.class));
+    }
+
+    @Override
+    public Node visitCatalogElement(SqlBaseParser.CatalogElementContext context)
+    {
+        return new CatalogElement(getLocation(context), getTextIfPresent(context.name).map(AstBuilder::unquote).get(), getTextIfPresent(context.value).map(AstBuilder::unquote).get());
+    }
+
+    @Override
+    public Node visitDropCatalog(SqlBaseParser.DropCatalogContext context)
+    {
+        return new DropCatalog(getLocation(context), (Identifier) visit(context.identifier()));
+    }
+
+    @Override
+    public Node visitShowCreateCatalog(SqlBaseParser.ShowCreateCatalogContext context)
+    {
+        return new ShowCreateCatalog(getLocation(context), (Identifier) visit(context.identifier()));
     }
 
     // ********************** query expressions ********************

@@ -27,12 +27,14 @@ import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -40,6 +42,7 @@ import static io.prestosql.decoder.FieldValueProviders.booleanValueProvider;
 import static io.prestosql.decoder.FieldValueProviders.bytesValueProvider;
 import static io.prestosql.decoder.FieldValueProviders.longValueProvider;
 import static java.lang.String.format;
+import static java.util.Objects.requireNonNull;
 import static redis.clients.jedis.ScanParams.SCAN_POINTER_START;
 
 public class RedisRecordCursor
@@ -58,17 +61,20 @@ public class RedisRecordCursor
     private final ScanParams scanParms;
 
     private ScanResult<String> redisCursor;
-    private Iterator<String> keysIterator;
+    private List<String> keys;
 
     private final AtomicBoolean reported = new AtomicBoolean();
 
-    private String valueString;
+    private List<String> values;
     private Map<String, String> valueMap;
 
     private long totalBytes;
     private long totalValues;
 
-    private final FieldValueProvider[] currentRowValues;
+    private final Queue<FieldValueProvider[]> currentMultipleRows;
+
+    private long getDataNum;
+    private long getDataTime;
 
     RedisRecordCursor(
             RowDecoder keyDecoder,
@@ -84,7 +90,12 @@ public class RedisRecordCursor
         this.redisJedisManager = redisJedisManager;
         this.jedisPool = redisJedisManager.getJedisPool(split.getNodes().get(0));
         this.scanParms = setScanParms();
-        this.currentRowValues = new FieldValueProvider[columnHandles.size()];
+        // this.currentRowValues = new FieldValueProvider[columnHandles.size()];
+        this.currentMultipleRows = new LinkedList<>();
+        this.getDataNum = 0;
+        this.getDataTime = 0;
+        this.keys = new ArrayList<>();
+//        this.values = new ArrayList<>();
 
         fetchKeys();
     }
@@ -111,7 +122,8 @@ public class RedisRecordCursor
     public boolean hasUnscannedData()
     {
         if (redisCursor == null) {
-            return false;
+            // return false;
+            return true;
         }
         // no more keys are unscanned when
         // when redis scan command
@@ -122,14 +134,30 @@ public class RedisRecordCursor
     @Override
     public boolean advanceNextPosition()
     {
-        while (!keysIterator.hasNext()) {
-            if (!hasUnscannedData()) {
-                return endOfData();
+        log.info("advanceNextPosition_before: %s", currentMultipleRows.size());
+        currentMultipleRows.poll();
+        log.info("advanceNextPosition_after: %s", currentMultipleRows.size());
+        if (currentMultipleRows.isEmpty()) {
+            while (keys.isEmpty()) {
+                if (!hasUnscannedData()) {
+                    return endOfData();
+                }
+                long before = System.currentTimeMillis();
+                fetchKeys();
+                log.info("fetchKeysTime: %s", System.currentTimeMillis() - before);
             }
-            fetchKeys();
+            return nextRow();
         }
-
-        return nextRow(keysIterator.next());
+        else {
+            return true;
+        }
+//        getDataNum++;
+//        long start = System.currentTimeMillis();
+//        boolean nextRow = nextRow(keys);
+//        long end = System.currentTimeMillis();
+//        getDataTime += end - start;
+//        log.info("getDataNum: %s, getDataTime: %s", getDataNum, getDataTime);
+//        return nextRow;
     }
 
     private boolean endOfData()
@@ -140,63 +168,71 @@ public class RedisRecordCursor
         return false;
     }
 
-    private boolean nextRow(String keyString)
+    private boolean nextRow()
     {
-        fetchData(keyString);
+        long fetchDataTime = System.currentTimeMillis();
+        fetchData();
+        log.info("fetchDataTime: %s", System.currentTimeMillis() - fetchDataTime);
 
-        byte[] keyData = keyString.getBytes(StandardCharsets.UTF_8);
+        for (int i = 0; i < keys.size(); i++) {
+            String keyString = keys.get(i);
+            String valueString = values.get(i);
+            byte[] keyData = keyString.getBytes(StandardCharsets.UTF_8);
 
-        byte[] valueData = EMPTY_BYTE_ARRAY;
-        if (valueString != null) {
-            valueData = valueString.getBytes(StandardCharsets.UTF_8);
-        }
+            byte[] valueData = EMPTY_BYTE_ARRAY;
+            if (valueString != null) {
+                valueData = valueString.getBytes(StandardCharsets.UTF_8);
+            }
 
-        totalBytes += valueData.length;
-        totalValues++;
+            totalBytes += valueData.length;
+            totalValues++;
 
-        Optional<Map<DecoderColumnHandle, FieldValueProvider>> decodedKey = keyDecoder.decodeRow(keyData);
-        Optional<Map<DecoderColumnHandle, FieldValueProvider>> decodedValue = valueDecoder.decodeRow(
-                valueData,
-                valueMap);
+            Optional<Map<DecoderColumnHandle, FieldValueProvider>> decodedKey = keyDecoder.decodeRow(keyData);
+            Optional<Map<DecoderColumnHandle, FieldValueProvider>> decodedValue = valueDecoder.decodeRow(
+                    valueData,
+                    valueMap);
 
-        Map<ColumnHandle, FieldValueProvider> currentRowValuesMap = new HashMap<>();
+            Map<ColumnHandle, FieldValueProvider> currentRowValuesMap = new HashMap<>();
 
-        for (DecoderColumnHandle columnHandle : columnHandles) {
-            if (columnHandle.isInternal()) {
-                RedisInternalFieldDescription fieldDescription = RedisInternalFieldDescription.forColumnName(columnHandle.getName());
-                switch (fieldDescription) {
-                    case KEY_FIELD:
-                        currentRowValuesMap.put(columnHandle, bytesValueProvider(keyData));
-                        break;
-                    case VALUE_FIELD:
-                        currentRowValuesMap.put(columnHandle, bytesValueProvider(valueData));
-                        break;
-                    case KEY_LENGTH_FIELD:
-                        currentRowValuesMap.put(columnHandle, longValueProvider(keyData.length));
-                        break;
-                    case VALUE_LENGTH_FIELD:
-                        currentRowValuesMap.put(columnHandle, longValueProvider(valueData.length));
-                        break;
-                    case KEY_CORRUPT_FIELD:
-                        currentRowValuesMap.put(columnHandle, booleanValueProvider(decodedKey.isEmpty()));
-                        break;
-                    case VALUE_CORRUPT_FIELD:
-                        currentRowValuesMap.put(columnHandle, booleanValueProvider(decodedValue.isEmpty()));
-                        break;
-                    default:
-                        throw new IllegalArgumentException("unknown internal field " + fieldDescription);
+            for (DecoderColumnHandle columnHandle : columnHandles) {
+                if (columnHandle.isInternal()) {
+                    RedisInternalFieldDescription fieldDescription = RedisInternalFieldDescription.forColumnName(columnHandle.getName());
+                    switch (fieldDescription) {
+                        case KEY_FIELD:
+                            currentRowValuesMap.put(columnHandle, bytesValueProvider(keyData));
+                            break;
+                        case VALUE_FIELD:
+                            currentRowValuesMap.put(columnHandle, bytesValueProvider(valueData));
+                            break;
+                        case KEY_LENGTH_FIELD:
+                            currentRowValuesMap.put(columnHandle, longValueProvider(keyData.length));
+                            break;
+                        case VALUE_LENGTH_FIELD:
+                            currentRowValuesMap.put(columnHandle, longValueProvider(valueData.length));
+                            break;
+                        case KEY_CORRUPT_FIELD:
+                            currentRowValuesMap.put(columnHandle, booleanValueProvider(decodedKey.isEmpty()));
+                            break;
+                        case VALUE_CORRUPT_FIELD:
+                            currentRowValuesMap.put(columnHandle, booleanValueProvider(decodedValue.isEmpty()));
+                            break;
+                        default:
+                            throw new IllegalArgumentException("unknown internal field " + fieldDescription);
+                    }
                 }
             }
+
+            decodedKey.ifPresent(currentRowValuesMap::putAll);
+            decodedValue.ifPresent(currentRowValuesMap::putAll);
+
+            FieldValueProvider[] fieldValues = new FieldValueProvider[columnHandles.size()];
+            for (int j = 0; j < columnHandles.size(); j++) {
+                ColumnHandle columnHandle = columnHandles.get(j);
+                fieldValues[j] = currentRowValuesMap.get(columnHandle);
+            }
+            currentMultipleRows.offer(fieldValues);
         }
-
-        decodedKey.ifPresent(currentRowValuesMap::putAll);
-        decodedValue.ifPresent(currentRowValuesMap::putAll);
-
-        for (int i = 0; i < columnHandles.size(); i++) {
-            ColumnHandle columnHandle = columnHandles.get(i);
-            currentRowValues[i] = currentRowValuesMap.get(columnHandle);
-        }
-
+        keys.clear();
         return true;
     }
 
@@ -228,7 +264,7 @@ public class RedisRecordCursor
     public boolean isNull(int field)
     {
         checkArgument(field < columnHandles.size(), "Invalid field index");
-        return currentRowValues == null || currentRowValues[field].isNull();
+        return currentMultipleRows.peek() == null || currentMultipleRows.peek()[field].isNull();
     }
 
     @Override
@@ -242,7 +278,7 @@ public class RedisRecordCursor
     {
         checkArgument(field < columnHandles.size(), "Invalid field index");
         checkFieldType(field, expectedType);
-        return currentRowValues[field];
+        return requireNonNull(currentMultipleRows.peek())[field];
     }
 
     private void checkFieldType(int field, Class<?> expected)
@@ -298,28 +334,29 @@ public class RedisRecordCursor
                         cursor = redisCursor.getStringCursor();
                     }
 
-                    log.debug("Scanning new Redis keys from cursor %s . %d values read so far", cursor, totalValues);
-
+                    keys.clear();
+                    log.info("Scanning new Redis keys from cursor %s . %d values read so far", cursor, totalValues);
                     redisCursor = jedis.scan(cursor, scanParms);
-                    List<String> keys = redisCursor.getResult();
-                    keysIterator = keys.iterator();
+                    log.info("keys_before: %s", Arrays.toString(keys.toArray()));
+                    keys = redisCursor.getResult();
+                    log.info("keys_after: %s", Arrays.toString(keys.toArray()));
                 }
                 break;
                 case ZSET:
-                    Set<String> keys = jedis.zrange(split.getKeyName(), split.getStart(), split.getEnd());
-                    keysIterator = keys.iterator();
+                    keys = (List<String>) jedis.zrange(split.getKeyName(), split.getStart(), split.getEnd());
                     break;
                 default:
-                    log.debug("Redis type of key %s is unsupported", split.getKeyDataFormat());
+                    log.info("Redis type of key %s is unsupported", split.getKeyDataFormat());
                     return false;
             }
         }
         return true;
     }
 
-    private boolean fetchData(String keyString)
+    private boolean fetchData()
     {
-        valueString = null;
+        values = null;
+        // values.clear();
         valueMap = null;
         // Redis connector supports two types of Redis
         // values: STRING and HASH
@@ -329,21 +366,25 @@ public class RedisRecordCursor
         try (Jedis jedis = jedisPool.getResource()) {
             switch (split.getValueDataType()) {
                 case STRING:
-                    valueString = jedis.get(keyString);
-                    if (valueString == null) {
-                        log.warn("Redis data modified while query was running, string value at key %s deleted", keyString);
+                    if (values != null) {
+                        log.info("values_before: %s", Arrays.toString(values.toArray()));
+                    }
+                    values = jedis.mget(keys.toArray(new String[0]));
+                    log.info("values_after_size: %s", values.size());
+                    if (values == null) {
+                        log.info("Redis data modified while query was running, string value at key %s deleted", keys.get(0));
                         return false;
                     }
                     break;
-                case HASH:
-                    valueMap = jedis.hgetAll(keyString);
-                    if (valueMap == null) {
-                        log.warn("Redis data modified while query was running, hash value at key %s deleted", keyString);
-                        return false;
-                    }
-                    break;
+//                case HASH:
+//                    valueMap = jedis.hgetAll(keyString);
+//                    if (valueMap == null) {
+//                        log.warn("Redis data modified while query was running, hash value at key %s deleted", keyString);
+//                        return false;
+//                    }
+//                    break;
                 default:
-                    log.debug("Redis type for key %s is unsupported", keyString);
+                    log.info("Redis type for key %s is unsupported", keys.get(0));
                     return false;
             }
         }

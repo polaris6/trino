@@ -16,6 +16,7 @@ package io.prestosql.server;
 import io.airlift.node.NodeInfo;
 import io.prestosql.client.NodeVersion;
 import io.prestosql.client.ServerInfo;
+import io.prestosql.metadata.DynamicCatalogStore;
 import io.prestosql.metadata.NodeState;
 import io.prestosql.server.security.ResourceSecurity;
 
@@ -50,17 +51,19 @@ public class ServerInfoResource
     private final NodeVersion version;
     private final String environment;
     private final boolean coordinator;
+    private final DynamicCatalogStore dynamicCatalogStore;
     private final GracefulShutdownHandler shutdownHandler;
     private final long startTime = System.nanoTime();
     private final AtomicBoolean startupComplete = new AtomicBoolean();
 
     @Inject
-    public ServerInfoResource(NodeVersion nodeVersion, NodeInfo nodeInfo, ServerConfig serverConfig, GracefulShutdownHandler shutdownHandler)
+    public ServerInfoResource(NodeVersion nodeVersion, NodeInfo nodeInfo, ServerConfig serverConfig, GracefulShutdownHandler shutdownHandler, DynamicCatalogStore dynamicCatalogStore)
     {
         this.version = requireNonNull(nodeVersion, "nodeVersion is null");
         this.environment = requireNonNull(nodeInfo, "nodeInfo is null").getEnvironment();
         this.coordinator = requireNonNull(serverConfig, "serverConfig is null").isCoordinator();
         this.shutdownHandler = requireNonNull(shutdownHandler, "shutdownHandler is null");
+        this.dynamicCatalogStore = requireNonNull(dynamicCatalogStore, "dynamicCatalogStore is null");
     }
 
     @ResourceSecurity(PUBLIC)
@@ -68,7 +71,7 @@ public class ServerInfoResource
     @Produces(APPLICATION_JSON)
     public ServerInfo getInfo()
     {
-        boolean starting = !startupComplete.get();
+        boolean starting = !startupComplete.get() && dynamicCatalogStore.areCatalogsLoaded();
         return new ServerInfo(version, environment, coordinator, starting, Optional.of(nanosSince(startTime)));
     }
 

@@ -129,6 +129,10 @@ statement
     | DESCRIBE INPUT identifier                                        #describeInput
     | DESCRIBE OUTPUT identifier                                       #describeOutput
     | SET PATH pathSpecification                                       #setPath
+    | CREATE CATALOG identifier
+        '(' catalogElement (',' catalogElement)* ')'                   #createCatalog
+    | DROP CATALOG identifier                                          #dropCatalog
+    | SHOW CREATE CATALOG identifier	                               #showCreateCatalog
     ;
 
 query
@@ -221,6 +225,10 @@ selectItem
     : expression (AS? identifier)?                          #selectSingle
     | primaryExpression '.' ASTERISK (AS columnAliases)?    #selectAll
     | ASTERISK                                              #selectAll
+    ;
+
+catalogElement
+    : (name = string) '=' (value = string)
     ;
 
 relation
@@ -511,7 +519,7 @@ nonReserved
     // IMPORTANT: this rule must only contain tokens. Nested rules are not supported. See SqlParser.exitNonReserved
     : ADD | ADMIN | ALL | ANALYZE | ANY | ARRAY | ASC | AT | AUTHORIZATION
     | BERNOULLI
-    | CALL | CASCADE | CATALOGS | COLUMN | COLUMNS | COMMENT | COMMIT | COMMITTED | CURRENT
+    | CALL | CASCADE | CATALOGS | CATALOG | COLUMN | COLUMNS | COMMENT | COMMIT | COMMITTED | CURRENT
     | DATA | DATE | DAY | DEFINER | DESC | DISTRIBUTED | DOUBLE
     | EXCLUDING | EXPLAIN
     | FETCH | FILTER | FIRST | FOLLOWING | FORMAT | FUNCTIONS
@@ -555,6 +563,7 @@ CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
 CATALOGS: 'CATALOGS';
+CATALOG: 'CATALOG';
 COLUMN: 'COLUMN';
 COLUMNS: 'COLUMNS';
 COMMENT: 'COMMENT';

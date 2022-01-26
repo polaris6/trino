@@ -14,6 +14,7 @@
 package io.prestosql.server;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
 import com.google.common.base.StandardSystemProperty;
 import com.google.common.collect.ImmutableList;
 import com.google.inject.Injector;
@@ -40,6 +41,8 @@ import io.prestosql.execution.resourcegroups.ResourceGroupManager;
 import io.prestosql.execution.warnings.WarningCollectorModule;
 import io.prestosql.metadata.Catalog;
 import io.prestosql.metadata.CatalogManager;
+import io.prestosql.metadata.DynamicCatalogManager;
+import io.prestosql.metadata.DynamicCatalogStore;
 import io.prestosql.metadata.StaticCatalogStore;
 import io.prestosql.security.AccessControlManager;
 import io.prestosql.security.AccessControlModule;
@@ -54,9 +57,13 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+import static com.google.common.base.Strings.nullToEmpty;
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 import static io.airlift.discovery.client.ServiceAnnouncement.ServiceAnnouncementBuilder;
 import static io.airlift.discovery.client.ServiceAnnouncement.serviceAnnouncement;
@@ -67,6 +74,9 @@ import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
 
 public class Server
 {
+    private static Announcer announcer;
+    private static ServerConfig serverConfig;
+
     public final void start(String prestoVersion)
     {
         new EmbedVersion(prestoVersion).embedVersion(() -> doStart(prestoVersion)).run();
@@ -116,8 +126,12 @@ public class Server
 
             injector.getInstance(StaticCatalogStore.class).loadCatalogs();
 
+            injector.getInstance(DynamicCatalogManager.class).loadConfigurationManager();
+            injector.getInstance(DynamicCatalogStore.class).loadCatalogs();
+
+            announcer = injector.getInstance(Announcer.class);
             // TODO: remove this huge hack
-            updateConnectorIds(injector.getInstance(Announcer.class), injector.getInstance(CatalogManager.class));
+            updateConnectorIds(announcer, injector.getInstance(CatalogManager.class));
 
             injector.getInstance(SessionPropertyDefaults.class).loadConfigurationManager();
             injector.getInstance(ResourceGroupManager.class).loadConfigurationManager();
@@ -127,8 +141,8 @@ public class Server
             injector.getInstance(GroupProviderManager.class).loadConfiguredGroupProvider();
             injector.getInstance(CertificateAuthenticatorManager.class).loadCertificateAuthenticator();
 
-            injector.getInstance(Announcer.class).start();
-
+            serverConfig = injector.getInstance(ServerConfig.class);
+            announcer.start();
             injector.getInstance(ServerInfoResource.class).startupComplete();
 
             log.info("======== SERVER STARTED ========");
@@ -187,6 +201,30 @@ public class Server
         announcer.addServiceAnnouncement(builder.build());
     }
 
+    // TODO: This code is a hack that should be removed when the connectorId property is removed
+    public static void updateConnectorIds(String connectorId, ConnectorAction action)
+    {
+        // get existing announcement
+        ServiceAnnouncement announcement = getPrestoAnnouncement(announcer.getServiceAnnouncements());
+
+        // update datasources property
+        Map<String, String> properties = new LinkedHashMap<>(announcement.getProperties());
+        String property = nullToEmpty(properties.get("connectorIds"));
+        Set<String> connectorIds = new LinkedHashSet<>(Splitter.on(',').trimResults().omitEmptyStrings().splitToList(property));
+        if (action == ConnectorAction.ADD) {
+            connectorIds.add(connectorId);
+        }
+        else if (action == ConnectorAction.DELETE) {
+            connectorIds.remove(connectorId);
+        }
+        properties.put("connectorIds", Joiner.on(',').join(connectorIds));
+
+        // update announcement
+        announcer.removeServiceAnnouncement(announcement.getId());
+        announcer.addServiceAnnouncement(serviceAnnouncement(announcement.getType()).addProperties(properties).build());
+        announcer.forceAnnounce();
+    }
+
     private static ServiceAnnouncement getPrestoAnnouncement(Set<ServiceAnnouncement> announcements)
     {
         for (ServiceAnnouncement announcement : announcements) {
@@ -211,5 +249,14 @@ public class Server
             return;
         }
         log.info("%s: %s", name, path);
+    }
+
+    public static boolean isCoordinator()
+    {
+        return serverConfig.isCoordinator();
+    }
+
+    public enum ConnectorAction {
+        ADD, DELETE, MODIFY
     }
 }

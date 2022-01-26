@@ -39,7 +39,11 @@ public class TestRedisConnectorConfig
                 .setRedisDataBaseIndex(0)
                 .setRedisPassword(null)
                 .setRedisScanCount(100)
-                .setHideInternalColumns(true));
+                .setHideInternalColumns(true)
+                .setUseConfigDb(false)
+                .setConfigDbUrl(null)
+                .setConfigDbUser(null)
+                .setConfigDbPassword(null));
     }
 
     @Test
@@ -57,6 +61,10 @@ public class TestRedisConnectorConfig
                 .put("redis.connect-timeout", "10s")
                 .put("redis.database-index", "5")
                 .put("redis.password", "secret")
+                .put("redis.use-config-db", "true")
+                .put("redis.config-db-url", "jdbc:mysql://test")
+                .put("redis.config-db-user", "test")
+                .put("redis.config-db-password", "123456")
                 .build();
 
         RedisConnectorConfig expected = new RedisConnectorConfig()
@@ -70,7 +78,11 @@ public class TestRedisConnectorConfig
                 .setRedisDataBaseIndex(5)
                 .setRedisPassword("secret")
                 .setRedisKeyDelimiter(",")
-                .setKeyPrefixSchemaTable(true);
+                .setKeyPrefixSchemaTable(true)
+                .setUseConfigDb(true)
+                .setConfigDbUrl("jdbc:mysql://test")
+                .setConfigDbUser("test")
+                .setConfigDbPassword("123456");
 
         assertFullMapping(properties, expected);
     }

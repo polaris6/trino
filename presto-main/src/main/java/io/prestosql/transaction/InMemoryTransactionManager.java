@@ -186,6 +186,12 @@ public class InMemoryTransactionManager
     }
 
     @Override
+    public Optional<Map<String, String>> getCatalogProperties(TransactionId transactionId, String catalogName)
+    {
+        return getTransactionMetadata(transactionId).getCatalogProperties(catalogName);
+    }
+
+    @Override
     public Optional<CatalogMetadata> getOptionalCatalogMetadata(TransactionId transactionId, String catalogName)
     {
         TransactionMetadata transactionMetadata = getTransactionMetadata(transactionId);
@@ -375,6 +381,11 @@ public class InMemoryTransactionManager
                     .forEach(catalog -> catalogNames.putIfAbsent(catalog.getCatalogName(), catalog.getConnectorCatalogName()));
 
             return ImmutableMap.copyOf(catalogNames);
+        }
+
+        private synchronized Optional<Map<String, String>> getCatalogProperties(String catalogName)
+        {
+            return catalogManager.getCatalogInfo(catalogName);
         }
 
         private synchronized Optional<CatalogName> getConnectorId(String catalogName)

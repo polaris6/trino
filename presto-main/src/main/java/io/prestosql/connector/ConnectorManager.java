@@ -246,11 +246,13 @@ public class ConnectorManager
             addConnectorInternal(informationSchemaConnector);
             addConnectorInternal(systemConnector);
             catalogManager.registerCatalog(catalog);
+            catalogManager.registerCatalogInfo(catalog.getCatalogName(), factory.getConnectorFactory().getName(), properties);
             handleResolver.addCatalogHandleResolver(catalogName.getCatalogName(), connectorHandleResolver);
         }
         catch (Throwable e) {
             handleResolver.removeCatalogHandleResolver(catalogName.getCatalogName());
             catalogManager.removeCatalog(catalog.getCatalogName());
+            catalogManager.removeCatalogInfo(catalog.getCatalogName());
             removeConnectorInternal(systemConnector.getCatalogName());
             removeConnectorInternal(informationSchemaConnector.getCatalogName());
             removeConnectorInternal(connector.getCatalogName());
@@ -306,6 +308,8 @@ public class ConnectorManager
             removeConnectorInternal(createSystemTablesCatalogName(catalog));
             handleResolver.removeCatalogHandleResolver(catalogName);
         });
+
+        catalogManager.removeCatalogInfo(catalogName);
     }
 
     private synchronized void removeConnectorInternal(CatalogName catalogName)

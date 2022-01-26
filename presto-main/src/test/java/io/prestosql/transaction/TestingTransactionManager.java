@@ -89,6 +89,12 @@ public class TestingTransactionManager
     }
 
     @Override
+    public Optional<Map<String, String>> getCatalogProperties(TransactionId transactionId, String catalogName)
+    {
+        return Optional.empty();
+    }
+
+    @Override
     public Optional<CatalogMetadata> getOptionalCatalogMetadata(TransactionId transactionId, String catalogName)
     {
         return Optional.empty();

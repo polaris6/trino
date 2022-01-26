@@ -69,8 +69,11 @@ import io.prestosql.metadata.AnalyzePropertyManager;
 import io.prestosql.metadata.CatalogManager;
 import io.prestosql.metadata.ColumnPropertyManager;
 import io.prestosql.metadata.DiscoveryNodeManager;
+import io.prestosql.metadata.DynamicCatalogManager;
+import io.prestosql.metadata.DynamicCatalogStore;
 import io.prestosql.metadata.ForNodeManager;
 import io.prestosql.metadata.HandleJsonModule;
+import io.prestosql.metadata.InternalDynamicCatalogManager;
 import io.prestosql.metadata.InternalNodeManager;
 import io.prestosql.metadata.Metadata;
 import io.prestosql.metadata.MetadataManager;
@@ -252,6 +255,9 @@ public class ServerMainModule
                 config -> TOPOLOGY == config.getNodeSchedulerPolicy(),
                 new TopologyAwareNodeSelectorModule()));
 
+        // catalog execution
+        jaxrsBinder(binder).bind(CatalogResource.class);
+
         // task execution
         jaxrsBinder(binder).bind(TaskResource.class);
         newExporter(binder).export(TaskResource.class).withGeneratedName();
@@ -343,6 +349,7 @@ public class ServerMainModule
 
         // metadata
         binder.bind(StaticCatalogStore.class).in(Scopes.SINGLETON);
+        binder.bind(DynamicCatalogStore.class).in(Scopes.SINGLETON);
         configBinder(binder).bindConfig(StaticCatalogStoreConfig.class);
         binder.bind(MetadataManager.class).in(Scopes.SINGLETON);
         binder.bind(Metadata.class).to(MetadataManager.class).in(Scopes.SINGLETON);
@@ -370,6 +377,12 @@ public class ServerMainModule
 
         // system connector
         binder.install(new SystemConnectorModule());
+
+        // catalog manager
+        binder.bind(CatalogManager.class).in(Scopes.SINGLETON);
+        binder.bind(InternalDynamicCatalogManager.class).in(Scopes.SINGLETON);
+        newExporter(binder).export(DynamicCatalogManager.class).withGeneratedName();
+        binder.bind(DynamicCatalogManager.class).to(InternalDynamicCatalogManager.class);
 
         // slice
         jsonBinder(binder).addSerializerBinding(Slice.class).to(SliceSerializer.class);
@@ -399,8 +412,6 @@ public class ServerMainModule
         // plugin manager
         binder.bind(PluginManager.class).in(Scopes.SINGLETON);
         configBinder(binder).bindConfig(PluginManagerConfig.class);
-
-        binder.bind(CatalogManager.class).in(Scopes.SINGLETON);
 
         // block encodings
         jsonBinder(binder).addSerializerBinding(Block.class).to(BlockJsonSerde.Serializer.class);
