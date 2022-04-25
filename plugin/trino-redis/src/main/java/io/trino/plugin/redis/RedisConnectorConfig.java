@@ -46,6 +46,11 @@ public class RedisConnectorConfig
     private int redisScanCount = 100;
 
     /**
+     * Get values associated with the specified number of keys in the command such as MGET(key...).
+     */
+    private int redisGetKeySize = 100;
+
+    /**
      * Index of the Redis DB to connect to.
      */
     private int redisDataBaseIndex;
@@ -151,6 +156,18 @@ public class RedisConnectorConfig
     public RedisConnectorConfig setRedisScanCount(int redisScanCount)
     {
         this.redisScanCount = redisScanCount;
+        return this;
+    }
+
+    public int getRedisGetKeySize()
+    {
+        return redisGetKeySize;
+    }
+
+    @Config("redis.get-key-size")
+    public RedisConnectorConfig setRedisGetKeySize(int redisGetKeySize)
+    {
+        this.redisGetKeySize = redisGetKeySize;
         return this;
     }
 

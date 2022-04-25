@@ -24,6 +24,7 @@ import io.trino.spi.type.Type;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.Pipeline;
+import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.params.ScanParams;
 import redis.clients.jedis.resps.ScanResult;
 
@@ -58,6 +59,7 @@ public class RedisRecordCursor
     private final RedisJedisManager redisJedisManager;
     private final JedisPool jedisPool;
     private final ScanParams scanParams;
+    private final int getKeySize;
 
     private ScanResult<String> redisCursor;
     private List<String> keys;
@@ -86,6 +88,7 @@ public class RedisRecordCursor
         this.redisJedisManager = redisJedisManager;
         this.jedisPool = redisJedisManager.getJedisPool(split.getNodes().get(0));
         this.scanParams = setScanParams();
+        this.getKeySize = redisJedisManager.getRedisConnectorConfig().getRedisGetKeySize();
         this.currentMultipleRows = new LinkedList<>();
 
         fetchKeys();
@@ -150,10 +153,11 @@ public class RedisRecordCursor
 
     private boolean nextMultipleRows()
     {
-        fetchData();
+        List<String> currentKeys = keys.size() > getKeySize ? keys.subList(0, getKeySize) : keys;
+        fetchData(currentKeys);
 
-        for (int i = 0; i < keys.size(); i++) {
-            String keyString = keys.get(i);
+        for (int i = 0; i < currentKeys.size(); i++) {
+            String keyString = currentKeys.get(i);
             byte[] keyData = keyString.getBytes(StandardCharsets.UTF_8);
 
             byte[] stringValueData = EMPTY_BYTE_ARRAY;
@@ -171,7 +175,11 @@ public class RedisRecordCursor
                     }
                     break;
                 case HASH:
-                    hashValueMap = (Map<String, String>) hashValues.get(i);
+                    Object object = hashValues.get(i);
+                    if (object instanceof JedisDataException) {
+                        throw (JedisDataException) object;
+                    }
+                    hashValueMap = (Map<String, String>) object;
                     break;
                 default:
                     log.warn("Redis value of type %s is unsupported", split.getValueDataType());
@@ -224,7 +232,7 @@ public class RedisRecordCursor
             }
             currentMultipleRows.offer(fieldValues);
         }
-        keys.clear();
+        currentKeys.clear();
         return true;
     }
 
@@ -343,7 +351,7 @@ public class RedisRecordCursor
         }
     }
 
-    private void fetchData()
+    private void fetchData(List<String> currentKeys)
     {
         stringValues = null;
         hashValues = null;
@@ -355,11 +363,11 @@ public class RedisRecordCursor
         try (Jedis jedis = jedisPool.getResource()) {
             switch (split.getValueDataType()) {
                 case STRING:
-                    stringValues = jedis.mget(keys.toArray(new String[0]));
+                    stringValues = jedis.mget(currentKeys.toArray(new String[0]));
                     break;
                 case HASH:
                     Pipeline pipeline = jedis.pipelined();
-                    for (String key : keys) {
+                    for (String key : currentKeys) {
                         pipeline.hgetAll(key);
                     }
                     hashValues = pipeline.syncAndReturnAll();
