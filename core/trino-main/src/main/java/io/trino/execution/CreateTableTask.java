@@ -22,6 +22,7 @@ import io.trino.Session;
 import io.trino.connector.CatalogName;
 import io.trino.execution.warnings.WarningCollector;
 import io.trino.metadata.ColumnPropertyManager;
+import io.trino.metadata.Metadata;
 import io.trino.metadata.QualifiedObjectName;
 import io.trino.metadata.RedirectionAwareTableHandle;
 import io.trino.metadata.TableHandle;
@@ -126,9 +127,10 @@ public class CreateTableTask
 
         Map<NodeRef<Parameter>, Expression> parameterLookup = parameterExtractor(statement, parameters);
         QualifiedObjectName tableName = createQualifiedObjectName(session, statement, statement.getName());
+        Metadata metadata = plannerContext.getMetadata();
         Optional<TableHandle> tableHandle;
         try {
-            tableHandle = plannerContext.getMetadata().getTableHandle(session, tableName);
+            tableHandle = metadata.getTableHandle(session, tableName);
         }
         catch (TrinoException e) {
             if (e.getErrorCode().equals(UNSUPPORTED_TABLE_TYPE.toErrorCode())) {
@@ -136,7 +138,15 @@ public class CreateTableTask
             }
             throw e;
         }
-        if (tableHandle.isPresent()) {
+        if (metadata.isMaterializedView(session, tableName)) {
+            throw semanticException(TABLE_ALREADY_EXISTS, statement, "Materialized view already exists: '%s', the table name cannot be the same as the materialized view", tableName);
+        }
+        if (metadata.isView(session, tableName)) {
+            if (!statement.isNotExists()) {
+                throw semanticException(TABLE_ALREADY_EXISTS, statement, "View already exists: '%s', the table name cannot be the same as the view", tableName);
+            }
+        }
+        else if (tableHandle.isPresent()) {
             if (!statement.isNotExists()) {
                 throw semanticException(TABLE_ALREADY_EXISTS, statement, "Table '%s' already exists", tableName);
             }
