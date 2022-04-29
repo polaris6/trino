@@ -23,10 +23,13 @@ import io.trino.eventlistener.EventListenerConfig;
 import io.trino.eventlistener.EventListenerManager;
 import io.trino.metadata.AbstractMockMetadata;
 import io.trino.metadata.ColumnPropertyManager;
+import io.trino.metadata.MaterializedViewDefinition;
 import io.trino.metadata.QualifiedObjectName;
 import io.trino.metadata.TableHandle;
 import io.trino.metadata.TableMetadata;
 import io.trino.metadata.TablePropertyManager;
+import io.trino.metadata.ViewColumn;
+import io.trino.metadata.ViewDefinition;
 import io.trino.security.AllowAllAccessControl;
 import io.trino.spi.TrinoException;
 import io.trino.spi.connector.ColumnHandle;
@@ -35,6 +38,7 @@ import io.trino.spi.connector.ConnectorCapabilities;
 import io.trino.spi.connector.ConnectorTableMetadata;
 import io.trino.spi.connector.SchemaTableName;
 import io.trino.spi.security.AccessDeniedException;
+import io.trino.spi.security.Identity;
 import io.trino.sql.PlannerContext;
 import io.trino.sql.planner.TestingConnectorTransactionHandle;
 import io.trino.sql.tree.ColumnDefinition;
@@ -57,14 +61,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.collect.Sets.immutableEnumSet;
 import static io.airlift.concurrent.MoreFutures.getFutureValue;
 import static io.trino.SessionTestUtils.TEST_SESSION;
+import static io.trino.execution.BaseDataDefinitionTaskTest.asQualifiedName;
+import static io.trino.execution.BaseDataDefinitionTaskTest.qualifiedObjectName;
+import static io.trino.execution.BaseDataDefinitionTaskTest.someView;
 import static io.trino.spi.StandardErrorCode.ALREADY_EXISTS;
 import static io.trino.spi.StandardErrorCode.INVALID_TABLE_PROPERTY;
 import static io.trino.spi.StandardErrorCode.NOT_SUPPORTED;
+import static io.trino.spi.StandardErrorCode.TABLE_ALREADY_EXISTS;
 import static io.trino.spi.connector.ConnectorCapabilities.NOT_NULL_COLUMN_CONSTRAINT;
 import static io.trino.spi.session.PropertyMetadata.stringProperty;
 import static io.trino.spi.type.BigintType.BIGINT;
@@ -169,6 +179,42 @@ public class TestCreateTableTask
     }
 
     @Test
+    public void testCreateTableOnViewIfExists()
+    {
+        QualifiedObjectName viewName = qualifiedObjectName("test_table");
+        metadata.createView(testSession, viewName, someView(), false);
+
+        CreateTable statement = new CreateTable(asQualifiedName(viewName),
+                ImmutableList.of(new ColumnDefinition(identifier("a"), toSqlType(BIGINT), true, emptyList(), Optional.empty())),
+                false,
+                ImmutableList.of(),
+                Optional.empty());
+
+        CreateTableTask createTableTask = new CreateTableTask(plannerContext, new AllowAllAccessControl(), columnPropertyManager, tablePropertyManager);
+        assertTrinoExceptionThrownBy(() -> getFutureValue(createTableTask.internalExecute(statement, testSession, emptyList(), output -> {})))
+                .hasErrorCode(TABLE_ALREADY_EXISTS)
+                .hasMessage("View already exists: '%s', the table name cannot be the same as the view", asQualifiedName(viewName), asQualifiedName(viewName));
+    }
+
+    @Test
+    public void testCreateTableOnMaterializedViewIfExists()
+    {
+        QualifiedObjectName viewName = qualifiedObjectName("test_table");
+        metadata.createMaterializedView(testSession, viewName, someMaterializedView(), false, false);
+
+        CreateTable statement = new CreateTable(asQualifiedName(viewName),
+                ImmutableList.of(new ColumnDefinition(identifier("a"), toSqlType(BIGINT), true, emptyList(), Optional.empty())),
+                false,
+                ImmutableList.of(),
+                Optional.empty());
+
+        CreateTableTask createTableTask = new CreateTableTask(plannerContext, new AllowAllAccessControl(), columnPropertyManager, tablePropertyManager);
+        assertTrinoExceptionThrownBy(() -> getFutureValue(createTableTask.internalExecute(statement, testSession, emptyList(), output -> {})))
+                .hasErrorCode(TABLE_ALREADY_EXISTS)
+                .hasMessage("Materialized view already exists: '%s', the table name cannot be the same as the materialized view", asQualifiedName(viewName), asQualifiedName(viewName));
+    }
+
+    @Test
     public void testCreateTableWithMaterializedViewPropertyFails()
     {
         CreateTable statement = new CreateTable(QualifiedName.of("test_table"),
@@ -238,7 +284,7 @@ public class TestCreateTableTask
     @Test
     public void testCreateLike()
     {
-        CreateTable statement = getCreatleLikeStatement(false);
+        CreateTable statement = getCreateLikeStatement(false);
 
         CreateTableTask createTableTask = new CreateTableTask(plannerContext, new AllowAllAccessControl(), columnPropertyManager, tablePropertyManager);
         getFutureValue(createTableTask.internalExecute(statement, testSession, List.of(), output -> {}));
@@ -252,7 +298,7 @@ public class TestCreateTableTask
     @Test
     public void testCreateLikeWithProperties()
     {
-        CreateTable statement = getCreatleLikeStatement(true);
+        CreateTable statement = getCreateLikeStatement(true);
 
         CreateTableTask createTableTask = new CreateTableTask(plannerContext, new AllowAllAccessControl(), columnPropertyManager, tablePropertyManager);
         getFutureValue(createTableTask.internalExecute(statement, testSession, List.of(), output -> {}));
@@ -267,7 +313,7 @@ public class TestCreateTableTask
     @Test
     public void testCreateLikeDenyPermission()
     {
-        CreateTable statement = getCreatleLikeStatement(false);
+        CreateTable statement = getCreateLikeStatement(false);
 
         TestingAccessControlManager accessControl = new TestingAccessControlManager(transactionManager, new EventListenerManager(new EventListenerConfig()));
         accessControl.deny(privilege("parent_table", SELECT_COLUMN));
@@ -281,7 +327,7 @@ public class TestCreateTableTask
     @Test
     public void testCreateLikeWithPropertiesDenyPermission()
     {
-        CreateTable statement = getCreatleLikeStatement(true);
+        CreateTable statement = getCreateLikeStatement(true);
 
         TestingAccessControlManager accessControl = new TestingAccessControlManager(transactionManager, new EventListenerManager(new EventListenerConfig()));
         accessControl.deny(privilege("parent_table", SHOW_CREATE_TABLE));
@@ -292,7 +338,7 @@ public class TestCreateTableTask
                 .hasMessageContaining("Cannot reference properties of table");
     }
 
-    private CreateTable getCreatleLikeStatement(boolean includingProperties)
+    private CreateTable getCreateLikeStatement(boolean includingProperties)
     {
         return new CreateTable(
                 QualifiedName.of("test_table"),
@@ -302,11 +348,26 @@ public class TestCreateTableTask
                 Optional.empty());
     }
 
+    private MaterializedViewDefinition someMaterializedView()
+    {
+        return new MaterializedViewDefinition(
+                "select * from some_table",
+                Optional.empty(),
+                Optional.empty(),
+                ImmutableList.of(new ViewColumn("test", BIGINT.getTypeId())),
+                Optional.empty(),
+                Identity.ofUser("owner"),
+                Optional.empty(),
+                ImmutableMap.of());
+    }
+
     private static class MockMetadata
             extends AbstractMockMetadata
     {
         private final CatalogName catalogHandle;
         private final List<ConnectorTableMetadata> tables = new CopyOnWriteArrayList<>();
+        private final Map<SchemaTableName, ViewDefinition> views = new ConcurrentHashMap<>();
+        private final Map<SchemaTableName, MaterializedViewDefinition> materializedViews = new ConcurrentHashMap<>();
         private Set<ConnectorCapabilities> connectorCapabilities;
 
         public MockMetadata(CatalogName catalogHandle, Set<ConnectorCapabilities> connectorCapabilities)
@@ -383,6 +444,32 @@ public class TestCreateTableTask
         public void setConnectorCapabilities(ConnectorCapabilities... connectorCapabilities)
         {
             this.connectorCapabilities = immutableEnumSet(ImmutableList.copyOf(connectorCapabilities));
+        }
+
+        @Override
+        public void createView(Session session, QualifiedObjectName viewName, ViewDefinition definition, boolean replace)
+        {
+            checkArgument(replace || !views.containsKey(viewName.asSchemaTableName()));
+            views.put(viewName.asSchemaTableName(), definition);
+        }
+
+        @Override
+        public Optional<ViewDefinition> getView(Session session, QualifiedObjectName viewName)
+        {
+            return Optional.ofNullable(views.get(viewName.asSchemaTableName()));
+        }
+
+        @Override
+        public void createMaterializedView(Session session, QualifiedObjectName viewName, MaterializedViewDefinition definition, boolean replace, boolean ignoreExisting)
+        {
+            checkArgument(ignoreExisting || !materializedViews.containsKey(viewName.asSchemaTableName()));
+            materializedViews.put(viewName.asSchemaTableName(), definition);
+        }
+
+        @Override
+        public Optional<MaterializedViewDefinition> getMaterializedView(Session session, QualifiedObjectName viewName)
+        {
+            return Optional.ofNullable(materializedViews.get(viewName.asSchemaTableName()));
         }
     }
 }
