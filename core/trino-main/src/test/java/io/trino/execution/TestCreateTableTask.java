@@ -193,7 +193,7 @@ public class TestCreateTableTask
         CreateTableTask createTableTask = new CreateTableTask(plannerContext, new AllowAllAccessControl(), columnPropertyManager, tablePropertyManager);
         assertTrinoExceptionThrownBy(() -> getFutureValue(createTableTask.internalExecute(statement, testSession, emptyList(), output -> {})))
                 .hasErrorCode(TABLE_ALREADY_EXISTS)
-                .hasMessage("View already exists: '%s', the table name cannot be the same as the view", asQualifiedName(viewName), asQualifiedName(viewName));
+                .hasMessage("View already exists: '%s'", asQualifiedName(viewName), asQualifiedName(viewName));
     }
 
     @Test
@@ -211,7 +211,7 @@ public class TestCreateTableTask
         CreateTableTask createTableTask = new CreateTableTask(plannerContext, new AllowAllAccessControl(), columnPropertyManager, tablePropertyManager);
         assertTrinoExceptionThrownBy(() -> getFutureValue(createTableTask.internalExecute(statement, testSession, emptyList(), output -> {})))
                 .hasErrorCode(TABLE_ALREADY_EXISTS)
-                .hasMessage("Materialized view already exists: '%s', the table name cannot be the same as the materialized view", asQualifiedName(viewName), asQualifiedName(viewName));
+                .hasMessage("Materialized view already exists: '%s'", asQualifiedName(viewName), asQualifiedName(viewName));
     }
 
     @Test

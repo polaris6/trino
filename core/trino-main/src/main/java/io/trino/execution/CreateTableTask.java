@@ -139,11 +139,11 @@ public class CreateTableTask
             throw e;
         }
         if (metadata.isMaterializedView(session, tableName)) {
-            throw semanticException(TABLE_ALREADY_EXISTS, statement, "Materialized view already exists: '%s', the table name cannot be the same as the materialized view", tableName);
+            throw semanticException(TABLE_ALREADY_EXISTS, statement, "Materialized view already exists: '%s'", tableName);
         }
         if (metadata.isView(session, tableName)) {
             if (!statement.isNotExists()) {
-                throw semanticException(TABLE_ALREADY_EXISTS, statement, "View already exists: '%s', the table name cannot be the same as the view", tableName);
+                throw semanticException(TABLE_ALREADY_EXISTS, statement, "View already exists: '%s'", tableName);
             }
         }
         else if (tableHandle.isPresent()) {
