@@ -21,6 +21,7 @@ import io.airlift.units.Duration;
 import io.airlift.units.MinDuration;
 import io.prestosql.spi.HostAddress;
 
+import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 
@@ -43,6 +44,11 @@ public class RedisConnectorConfig
      * Count parameter for Redis scan command.
      */
     private int redisScanCount = 100;
+
+    /**
+     * Get values associated with the specified number of keys in the command such as MGET(key...).
+     */
+    private int redisMaxKeysPerFetch = 100;
 
     /**
      * Index of the Redis DB to connect to.
@@ -150,6 +156,19 @@ public class RedisConnectorConfig
     public RedisConnectorConfig setRedisScanCount(int redisScanCount)
     {
         this.redisScanCount = redisScanCount;
+        return this;
+    }
+
+    @Min(1)
+    public int getRedisMaxKeysPerFetch()
+    {
+        return redisMaxKeysPerFetch;
+    }
+
+    @Config("redis.max-keys-per-fetch")
+    public RedisConnectorConfig setRedisMaxKeysPerFetch(int redisMaxKeysPerFetch)
+    {
+        this.redisMaxKeysPerFetch = redisMaxKeysPerFetch;
         return this;
     }
 
