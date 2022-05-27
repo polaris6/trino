@@ -126,6 +126,7 @@
         <module>plugin/trino-hive-hadoop2</module>
         <module>plugin/trino-http-event-listener</module>
         <module>plugin/trino-iceberg</module>
+        <module>plugin/trino-ignite</module>
         <module>plugin/trino-jmx</module>
         <module>plugin/trino-kafka</module>
         <module>plugin/trino-kinesis</module>
@@ -1474,6 +1475,12 @@
                 <groupId>org.apache.commons</groupId>
                 <artifactId>commons-math3</artifactId>
                 <version>3.6.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.ignite</groupId>
+                <artifactId>ignite-core</artifactId>
+                <version>2.7.6</version>
             </dependency>
 
             <dependency>
