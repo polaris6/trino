@@ -5,7 +5,7 @@
     <parent>
         <groupId>io.trino</groupId>
         <artifactId>trino-root</artifactId>
-        <version>382</version>
+        <version>382-bk-1.0.0</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -140,7 +140,7 @@
                         </goals>
                         <configuration>
                             <source>
-                                def match = project.version =~ /(\d+)(?:-SNAPSHOT)?/
+                                def match = project.version =~ /(\d+)(-bk-)(\d+\.\d+\.\d+)(?:-SNAPSHOT)?/
                                 if (!match.matches()) {
                                     throw new RuntimeException("Invalid version: " + project.version)
                                 }
